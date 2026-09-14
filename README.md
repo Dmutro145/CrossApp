@@ -15,3 +15,5 @@ dotnet run --project src/Cli
 | RID       | Розмір каталогу publish      |
 | win-x64    | ≈ 76.8 MB (80 564 821 байт) |
 | linux-x64 | ≈ 78.8 MB (82 621 721 байт) |
+
+## коментар
