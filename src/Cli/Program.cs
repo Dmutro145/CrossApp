@@ -30,7 +30,38 @@ if (!File.Exists(path))
     return 1;
 }
 
-ImportResult<ProductDto> result = ProductCsvImporter.Load(path);
+if (args.Contains("--mixed"))
+{
+    MixedImportResult mixed = MixedCsvImporterExtra.Load(path);
+
+    Console.WriteLine($"Товарів: {mixed.Products.Count}, клієнтів: {mixed.Customers.Count}");
+    foreach (ProductDto p in mixed.Products)
+        Console.WriteLine($" Товар   {p.Id,-6} {p.Name,-30} {p.Price.ToString("F2", CultureInfo.InvariantCulture),8}");
+    foreach (CustomerDto c in mixed.Customers)
+        Console.WriteLine($" Клієнт  {c.Id,-6} {c.Name,-30} {c.Email ?? "—"}");
+
+    if (mixed.Errors.Count > 0)
+    {
+        Console.WriteLine($"Пропущено рядків: {mixed.Errors.Count}");
+        foreach (string e in mixed.Errors)
+            Console.WriteLine($" ! {e}");
+    }
+    Console.WriteLine(mixed.Summary());
+    return 0;
+}
+
+ImportResult<ProductDto>? result = Path.GetExtension(path).ToLowerInvariant() switch
+{
+    ".csv"  => ProductCsvImporter.Load(path),
+    ".json" => ProductJsonImporter.Load(path),
+    _       => null
+};
+
+if (result is null)
+{
+    Console.WriteLine($"Непідтримуваний формат файлу: {Path.GetExtension(path)} (очікую .csv або .json)");
+    return 2;
+}
 
 Console.WriteLine($"Завантажено записів: {result.Items.Count}");
 foreach (ProductDto p in result.Items.Take(5))
@@ -42,5 +73,5 @@ if (result.Errors.Count > 0)
     foreach (string e in result.Errors)
         Console.WriteLine($" ! {e}");
 }
-
+Console.WriteLine(result.Summary());
 return 0;

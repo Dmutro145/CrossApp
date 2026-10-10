@@ -45,12 +45,12 @@ public static class ProductCsvImporter
         string[] parts = line.Split(Separator, StringSplitOptions.TrimEntries);
 
         return parts switch
-        {
+        {   //1-й патерн
             { Length: < 3 } => new ParseFailed($"очікую 3 колонки, отримав {parts.Length}"),
-
+            //2-й патерн
             ["", _, _] or [_, "", _]
                 => new ParseFailed("ID або назва порожні"),
-
+            //3-й патерн
             [_, _, var price] when !decimal.TryParse(price, NumberStyles.AllowDecimalPoint,
                                                      CultureInfo.InvariantCulture, out _)
                 => new ParseFailed($"ціна '{price}' не є невід'ємним числом"),

@@ -39,6 +39,10 @@ dotnet run --project src/Cli
 кодування UTF-8, ціна з крапкою як десятковим роздільником (InvariantCulture).
 У файлі навмисно є 3 пошкоджені рядки (12 — мало колонок, 13 — нечислова ціна,
 14 — порожня назва): вони перевіряють, що імпорт не падає на поганих даних.
+Extra
+JSON importer (.csv / .json через switch expression)
+Mixed CSV importer (P;..., C;...)
+Import statistics (total / accepted / skipped / error %)
 
 Запуск: `dotnet run --project src/Cli` (з кореня репозиторію)
 або `dotnet run --project src/Cli -- шлях\до\файлу.csv`.
