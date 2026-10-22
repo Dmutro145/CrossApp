@@ -1,13 +1,22 @@
 namespace Core.Domain;
 using Core.Dto;
 
+//Extralab5.3
+public enum OrderStatus
+{
+    Draft,
+    Confirmed,
+    Cancelled
+}
+
 public sealed class Order
 {
     private readonly List<OrderLine> _lines = [];
 
     public string Id { get; }
     public string CustomerId { get; }
-    public bool IsConfirmed { get; private set; }
+    public OrderStatus Status { get; private set; } = OrderStatus.Draft;
+    public bool IsConfirmed => Status == OrderStatus.Confirmed;
     public IReadOnlyList<OrderLine> Lines => _lines.AsReadOnly();
 
     public decimal Total => _lines.Sum(l => l.LineTotal);
@@ -31,27 +40,41 @@ public sealed class Order
 
     public void AddLine(string productId, string name, decimal price, int quantity)
     {
-        if (IsConfirmed)
-            throw new InvalidOperationException(
-                $"Замовлення {Id} вже підтверджене, рядки додавати не можна");
+        if (Status != OrderStatus.Draft)
+           throw new InvalidOperationException(
+             $"Замовлення {Id} має статус {Status}, рядки додавати не можна");
 
         // Створюємо рядок через його фабрику — усі перевірки кількості і ціни там
         var line = OrderLine.Create(productId, name, price, quantity);
         _lines.Add(line);
     }
 
+   private void ChangeStatus(OrderStatus target)
+{
+    bool allowed = (Status, target) switch
+    {
+        (OrderStatus.Draft, OrderStatus.Confirmed) => true,
+        (OrderStatus.Draft, OrderStatus.Cancelled) => true,
+        (OrderStatus.Confirmed, OrderStatus.Cancelled) => true,
+        _ => false
+    };
+
+    if (!allowed)
+        throw new InvalidOperationException(
+            $"Замовлення {Id}: перехід {Status} -> {target} неможливий");
+
+    Status = target;
+}
     public void Confirm()
     {
-        if (IsConfirmed)
-            throw new InvalidOperationException(
-                $"Замовлення {Id} вже підтверджене");
-
         if (_lines.Count == 0)
             throw new InvalidOperationException(
                 $"Не можна підтвердити порожнє замовлення {Id}");
 
-        IsConfirmed = true;
+        ChangeStatus(OrderStatus.Confirmed);
     }
+
+    public void Cancel() => ChangeStatus(OrderStatus.Cancelled);
         public OrderDto ToDto() =>
         new(Id, CustomerId, IsConfirmed, _lines.Select(l => l.ToDto()).ToList());
 
@@ -70,7 +93,7 @@ public sealed class Order
 
         return order;
     }
-    public override string ToString() =>
+       public override string ToString() =>
         $"Order {Id} (клієнт {CustomerId}) — рядків: {_lines.Count}, сума: {Total:F2}, " +
-        $"статус: {(IsConfirmed ? "підтверджено" : "чернетка")}";
+        $"статус: {Status}";
 }

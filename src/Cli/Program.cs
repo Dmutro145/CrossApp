@@ -66,8 +66,63 @@ if (args.Contains("--domain"))
     TryDo("DTO: підтверджене без рядків", () => Order.FromDto(emptyConfirmed));
     TryDo("DTO: від'ємна кількість у рядку", () => Order.FromDto(badQuantity));
     TryDo("DTO: порожній Id", () => Order.FromDto(noId));
+
+    //Extra lab5.1
+    TryDo("DTO: порожній Id", () => Order.FromDto(noId));
+
+    Console.WriteLine();
+    Console.WriteLine("=== Сценарій 4: ImportResult -> сутності + відхилені ===");
+    var import = new ImportResult<ProductDto>(
+        [
+            new ProductDto("P-1", "Цемент", 180.50m),
+            new ProductDto("P-2", " ", 10m),
+            new ProductDto("P-3", "Цегла", -5m),
+            new ProductDto("P-4", "Пісок", 95m)
+        ],
+        []);
+
+    DomainLoadResult<OrderLine> loaded = OrderLineImporter.FromProducts(import, 2);
+    Console.WriteLine($"Коректних рядків: {loaded.Items.Count}, відхилено: {loaded.Rejected.Count}");
+    foreach (OrderLine l in loaded.Items)
+        Console.WriteLine($"  + {l}");
+    foreach (string r in loaded.Rejected)
+        Console.WriteLine($"  ! {r}");
+
+    ////Extra lab5.2
+    Console.WriteLine();
+    Console.WriteLine("=== Сценарій 5: правило на кілька замовлень (сервіс) ===");
+    var service = new OrderService();
+    for (int i = 1; i <= 5; i++)
+        service.CreateDraft($"O-50{i}", "C-500");
+    Console.WriteLine($"Незавершених у C-500: {service.Orders.Count(o => !o.IsConfirmed)}");
+
+    TryDo("6-те незавершене замовлення клієнта", () => service.CreateDraft("O-506", "C-500"));
+
+    service.CreateDraft("O-601", "C-600");
+    Console.WriteLine("  інший клієнт: ОК, правило його не блокує");
+
+    Order first = service.Orders[0];
+    first.AddLine("P-1", "Цемент", 100m, 1);
+    first.Confirm();
+    service.CreateDraft("O-506", "C-500");
+    Console.WriteLine("  після підтвердження одного замовлення: ОК, нове створено");
+    Console.WriteLine($"Усього замовлень у сервісі: {service.Orders.Count}");
+    //Extra lab5.3
+    Console.WriteLine();
+    Console.WriteLine("=== Сценарій 6: статуси та переходи ===");
+    Order o6 = Order.Create("O-700", "C-700");
+    Console.WriteLine($"Початковий статус: {o6.Status}");
+    TryDo("Draft -> Confirmed без рядків", () => o6.Confirm());
+    o6.AddLine("P-1", "Цемент", 100m, 1);
+    o6.Confirm();
+    Console.WriteLine($"Після Confirm: {o6.Status}");
+    o6.Cancel();
+    Console.WriteLine($"Після Cancel: {o6.Status}");
+    TryDo("Cancelled -> Confirmed", () => o6.Confirm());
+    TryDo("Cancelled -> Cancelled", () => o6.Cancel());
+    TryDo("додати рядок до скасованого", () => o6.AddLine("P-2", "Пісок", 10m, 1));
     return 0;
-} 
+}
 
 string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
 
