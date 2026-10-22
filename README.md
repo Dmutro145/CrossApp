@@ -46,3 +46,23 @@ Import statistics (total / accepted / skipped / error %)
 
 Запуск: `dotnet run --project src/Cli` (з кореня репозиторію)
 або `dotnet run --project src/Cli -- шлях\до\файлу.csv`.
+
+## Лабораторна 4: доменна модель
+
+Сутності: `Order` та `OrderLine` у `src/Core/Domain`.
+Records з лаби 3 (`ProductDto`, `CustomerDto`) лишаються DTO; додано `OrderDto` і `OrderLineDto`.
+
+### Інваріанти
+- Id замовлення не порожній (`Order.Create`, `ArgumentException`)
+- Id клієнта не порожній (`Order.Create`, `ArgumentException`)
+- Id товару в рядку не порожній (`OrderLine.Create`, `ArgumentException`)
+- Назва товару в рядку не порожня (`OrderLine.Create`, `ArgumentException`)
+- Ціна не від'ємна (`OrderLine.Create`, `ArgumentOutOfRangeException`)
+- Кількість у рядку більша за нуль (`OrderLine.Create`, `ArgumentOutOfRangeException`)
+- Не можна додати рядок до підтвердженого замовлення (`Order.AddLine`, `InvalidOperationException`)
+- Не можна підтвердити порожнє замовлення (`Order.Confirm`, `InvalidOperationException`)
+- Не можна підтвердити замовлення повторно (`Order.Confirm`, `InvalidOperationException`)
+- `FromDto` відновлює сутність через `Create` / `AddLine` / `Confirm`, тобто з тими самими перевірками
+
+### Запуск демонстрації
+dotnet run --project src/Cli -- --domain
