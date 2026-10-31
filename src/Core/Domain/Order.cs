@@ -41,30 +41,31 @@ public sealed class Order
     public void AddLine(string productId, string name, decimal price, int quantity)
     {
         if (Status != OrderStatus.Draft)
-           throw new InvalidOperationException(
-             $"Замовлення {Id} має статус {Status}, рядки додавати не можна");
+            throw new InvalidOperationException(
+                $"Замовлення {Id} має статус {Status}, рядки додавати не можна");
 
         // Створюємо рядок через його фабрику — усі перевірки кількості і ціни там
         var line = OrderLine.Create(productId, name, price, quantity);
         _lines.Add(line);
     }
 
-   private void ChangeStatus(OrderStatus target)
-{
-    bool allowed = (Status, target) switch
+    private void ChangeStatus(OrderStatus target)
     {
-        (OrderStatus.Draft, OrderStatus.Confirmed) => true,
-        (OrderStatus.Draft, OrderStatus.Cancelled) => true,
-        (OrderStatus.Confirmed, OrderStatus.Cancelled) => true,
-        _ => false
-    };
+        bool allowed = (Status, target) switch
+        {
+            (OrderStatus.Draft, OrderStatus.Confirmed) => true,
+            (OrderStatus.Draft, OrderStatus.Cancelled) => true,
+            (OrderStatus.Confirmed, OrderStatus.Cancelled) => true,
+            _ => false
+        };
 
-    if (!allowed)
-        throw new InvalidOperationException(
-            $"Замовлення {Id}: перехід {Status} -> {target} неможливий");
+        if (!allowed)
+            throw new InvalidOperationException(
+                $"Замовлення {Id}: перехід {Status} -> {target} неможливий");
 
-    Status = target;
-}
+        Status = target;
+    }
+
     public void Confirm()
     {
         if (_lines.Count == 0)
@@ -75,9 +76,12 @@ public sealed class Order
     }
 
     public void Cancel() => ChangeStatus(OrderStatus.Cancelled);
-        public OrderDto ToDto() =>
-        new(Id, CustomerId, IsConfirmed, _lines.Select(l => l.ToDto()).ToList());
 
+    // ЗМІНЕНО: у DTO додано Status.ToString() останнім аргументом
+    public OrderDto ToDto() =>
+        new(Id, CustomerId, IsConfirmed, _lines.Select(l => l.ToDto()).ToList(), Status.ToString());
+
+    // ЗМІНЕНО: відновлюємо статус (Draft / Confirmed / Cancelled), а не лише IsConfirmed
     public static Order FromDto(OrderDto dto)
     {
         ArgumentNullException.ThrowIfNull(dto);
@@ -87,13 +91,25 @@ public sealed class Order
         foreach (OrderLineDto line in dto.Lines ?? [])
             order.AddLine(line.ProductId, line.Name, line.Price, line.Quantity);
 
-        // Підтверджуємо в кінці: до підтвердженого замовлення рядки вже не додати.
-        if (dto.IsConfirmed)
-            order.Confirm();
+        // Старі DTO без Status: статус виводимо з IsConfirmed.
+        string status = dto.Status
+            ?? (dto.IsConfirmed ? nameof(OrderStatus.Confirmed) : nameof(OrderStatus.Draft));
+
+        if (!Enum.TryParse(status, ignoreCase: true, out OrderStatus target)
+            || !Enum.IsDefined(target))
+            throw new ArgumentException($"Невідомий статус замовлення '{status}'", nameof(dto));
+
+        // Статус виставляємо в кінці: до підтвердженого чи скасованого рядки вже не додати.
+        switch (target)
+        {
+            case OrderStatus.Confirmed: order.Confirm(); break;
+            case OrderStatus.Cancelled: order.Cancel(); break;
+        }
 
         return order;
     }
-       public override string ToString() =>
+
+    public override string ToString() =>
         $"Order {Id} (клієнт {CustomerId}) — рядків: {_lines.Count}, сума: {Total:F2}, " +
         $"статус: {Status}";
 }

@@ -31,28 +31,5 @@ public static class OrderLineImporter
     }
 }
 
-//Extra lab5.2
-public sealed class OrderService
-{
-    public const int MaxOpenOrdersPerCustomer = 5;
-
-    private readonly List<Order> _orders = [];
-
-    public IReadOnlyList<Order> Orders => _orders.AsReadOnly();
-
-    public Order CreateDraft(string id, string customerId)
-    {
-        Order order = Order.Create(id, customerId);
-
-        int open = _orders.Count(o => o.CustomerId == order.CustomerId && !o.IsConfirmed);
-        if (open >= MaxOpenOrdersPerCustomer)
-            throw new InvalidOperationException(
-                $"У клієнта {order.CustomerId} уже {open} незавершених замовлень (максимум {MaxOpenOrdersPerCustomer})");
-
-        if (_orders.Any(o => o.Id == order.Id))
-            throw new InvalidOperationException($"Замовлення {order.Id} уже існує");
-
-        _orders.Add(order);
-        return order;
-    }
-}
+//Extra lab5.2 Delete
+ 

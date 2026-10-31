@@ -3,6 +3,9 @@ using System.Globalization;
 using Core.Dto;
 using Core.Import;
 using Core.Domain;
+using Core.Services;
+using Core.Storage;
+using Core.Abstractions;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
@@ -91,22 +94,23 @@ if (args.Contains("--domain"))
     ////Extra lab5.2
     Console.WriteLine();
     Console.WriteLine("=== Сценарій 5: правило на кілька замовлень (сервіс) ===");
-    var service = new OrderService();
+    var service = new OrderService(new InMemoryOrderStore());
     for (int i = 1; i <= 5; i++)
-        service.CreateDraft($"O-50{i}", "C-500");
-    Console.WriteLine($"Незавершених у C-500: {service.Orders.Count(o => !o.IsConfirmed)}");
+        service.CreateOrder($"O-50{i}", "C-500");
+    Console.WriteLine($"Незавершених у C-500: {service.All().Count(o => o.Status == OrderStatus.Draft)}");
 
-    TryDo("6-те незавершене замовлення клієнта", () => service.CreateDraft("O-506", "C-500"));
+    TryDo("6-те незавершене замовлення клієнта", () => service.CreateOrder("O-506", "C-500"));
 
-    service.CreateDraft("O-601", "C-600");
+    service.CreateOrder("O-601", "C-600");
     Console.WriteLine("  інший клієнт: ОК, правило його не блокує");
 
-    Order first = service.Orders[0];
-    first.AddLine("P-1", "Цемент", 100m, 1);
-    first.Confirm();
-    service.CreateDraft("O-506", "C-500");
+    Order first = service.All()[0];
+    service.AddLine(first.Id, "P-1", "Цемент", 100m, 1);
+    service.Confirm(first.Id);
+    service.CreateOrder("O-506", "C-500");
     Console.WriteLine("  після підтвердження одного замовлення: ОК, нове створено");
-    Console.WriteLine($"Усього замовлень у сервісі: {service.Orders.Count}");
+    Console.WriteLine($"Усього замовлень у сервісі: {service.All().Count}");
+
     //Extra lab5.3
     Console.WriteLine();
     Console.WriteLine("=== Сценарій 6: статуси та переходи ===");
@@ -121,6 +125,77 @@ if (args.Contains("--domain"))
     TryDo("Cancelled -> Confirmed", () => o6.Confirm());
     TryDo("Cancelled -> Cancelled", () => o6.Cancel());
     TryDo("додати рядок до скасованого", () => o6.AddLine("P-2", "Пісок", 10m, 1));
+    return 0;
+}
+
+if (args.Length == 0 || args.Contains("--file"))
+{
+    // ===== Composition root: єдине місце з конкретними класами сховищ =====
+    bool useFile = args.Contains("--file");
+    string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "orders.json");
+
+    IOrderStore store = useFile
+        ? new FileOrderStore(dataPath)
+        : new InMemoryOrderStore(SampleData.Orders());
+
+    var orderService = new OrderService(store);
+    // =======================================================================
+
+    Console.WriteLine($"Сховище: {store.GetType().Name}");
+    if (useFile) Console.WriteLine($"Файл: {dataPath}");
+    Console.WriteLine();
+
+    string newId = $"O-{Guid.NewGuid().ToString("N")[..8]}";
+    Order created = orderService.CreateOrder(newId, "C-100");
+    orderService.AddLine(created.Id, "P-001", "Цемент М400 25кг", 185.50m, 10);
+    orderService.AddLine(created.Id, "P-002", "Пісок будівельний", 95m, 3);
+    orderService.Confirm(created.Id);
+
+    Order? found = orderService.Find(created.Id);
+    Console.WriteLine($"Знайдено за id: {found}");
+    Console.WriteLine();
+
+    Console.WriteLine($"Усього замовлень: {orderService.All().Count}");
+    foreach (Order o in orderService.All())
+        Console.WriteLine($" {o.Id,-12} {o.CustomerId,-6} {o.Status,-10} {o.Lines.Count,3} {o.Total,10:F2}");
+
+    Console.WriteLine();
+    Console.WriteLine("=== Сценарій відмови ===");
+
+    // 1. Дубль id: унікальність перевіряє сховище
+    try
+    {
+        orderService.CreateOrder(created.Id, "C-100");
+        Console.WriteLine("  Дубль id: виняток НЕ спрацював!");
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.WriteLine($"  Помилка (дубль id): {ex.Message}");
+    }
+
+    // 2. Неіснуючий id: сервіс перетворює null зі сховища на виняток
+    try
+    {
+        orderService.Confirm("O-NOT-EXISTS");
+        Console.WriteLine("  Неіснуючий id: виняток НЕ спрацював!");
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.WriteLine($"  Помилка (немає замовлення): {ex.Message}");
+    }
+
+    // 3. Порушення правила сутності: повторне підтвердження
+    try
+    {
+        orderService.Confirm(created.Id);
+        Console.WriteLine("  Повторне підтвердження: виняток НЕ спрацював!");
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.WriteLine($"  Помилка (правило замовлення): {ex.Message}");
+    }
+
+    
     return 0;
 }
 

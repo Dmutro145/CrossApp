@@ -66,3 +66,22 @@ Records з лаби 3 (`ProductDto`, `CustomerDto`) лишаються DTO; до
 
 ### Запуск демонстрації
 dotnet run --project src/Cli -- --domain
+
+## Лабораторна 5: сервісний шар, два сховища, ручний DI
+
+Інтерфейс: `IOrderStore` (`src/Core/Abstractions`) — `List`, `GetById`, `Add`, `Update`, `Remove`.
+Реалізації (`src/Core/Storage`): `InMemoryOrderStore` (словник у пам'яті), `FileOrderStore` (кеш + JSON-файл).
+Сервіс: `OrderService` (`src/Core/Services`) — `CreateOrder`, `AddLine`, `Confirm`, `All`, `Find`; залежить лише від `IOrderStore` (конструктор).
+
+Залежності: `Cli → OrderService → IOrderStore → InMemoryOrderStore | FileOrderStore`.
+Composition root — `src/Cli/Program.cs`: конкретні сховища створюються тільки там; DI-контейнер не підключено.
+
+На диск іде `OrderDto` (додано поле `Status`, щоб зберігався і стан `Cancelled`).
+Файл даних: `data/orders.json` поруч із виконуваним файлом (`src/Cli/bin/Debug/net10.0/data/`).
+
+### Запуск
+dotnet run --project src/Cli              # InMemoryOrderStore, дані зникають після виходу
+dotnet run --project src/Cli -- --file    # FileOrderStore, дані накопичуються
+
+Сценарій: створити замовлення, додати рядки, підтвердити, показати список, знайти за id, потім сценарій відмови (дубль id, неіснуючий id, повторне підтвердження).
+Режими попередніх лабораторних: `-- --domain` (лаб. 4), `-- data\sample.csv` (лаб. 3).

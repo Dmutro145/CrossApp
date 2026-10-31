@@ -6,4 +6,5 @@ public sealed record OrderDto(
     string Id,
     string CustomerId,
     bool IsConfirmed,
-    IReadOnlyList<OrderLineDto> Lines);
+    IReadOnlyList<OrderLineDto> Lines,
+    string? Status = null);
