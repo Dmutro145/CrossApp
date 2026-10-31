@@ -41,6 +41,13 @@ public sealed class OrderService(IOrderStore store)
     public IReadOnlyList<Order> All() => _store.List();
 
     public Order? Find(string id) => _store.GetById(id);
+    
+    //Extra lab5.2
+    public IReadOnlyList<Order> Search(Func<Order, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return _store.List().Where(predicate).ToList();
+    }
 
     private Order GetOrThrow(string id) =>
         _store.GetById(id) ?? throw new InvalidOperationException($"Немає замовлення з id={id}.");

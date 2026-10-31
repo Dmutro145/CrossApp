@@ -91,7 +91,7 @@ if (args.Contains("--domain"))
     foreach (string r in loaded.Rejected)
         Console.WriteLine($"  ! {r}");
 
-    ////Extra lab5.2
+    ////Extra lab4.2
     Console.WriteLine();
     Console.WriteLine("=== Сценарій 5: правило на кілька замовлень (сервіс) ===");
     var service = new OrderService(new InMemoryOrderStore());
@@ -111,7 +111,7 @@ if (args.Contains("--domain"))
     Console.WriteLine("  після підтвердження одного замовлення: ОК, нове створено");
     Console.WriteLine($"Усього замовлень у сервісі: {service.All().Count}");
 
-    //Extra lab5.3
+    //Extra lab4.3
     Console.WriteLine();
     Console.WriteLine("=== Сценарій 6: статуси та переходи ===");
     Order o6 = Order.Create("O-700", "C-700");
@@ -128,21 +128,15 @@ if (args.Contains("--domain"))
     return 0;
 }
 
-if (args.Length == 0 || args.Contains("--file"))
+if (args.Length == 0 || args.Contains("--file") || args.Contains("--cache"))
 {
-    // ===== Composition root: єдине місце з конкретними класами сховищ =====
-    bool useFile = args.Contains("--file");
-    string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "orders.json");
+        // ===== Composition root: вибір сховища винесено у StoreFactory =====
+    StoreSetup setup = StoreFactory.Create(args);
+    var orderService = new OrderService(setup.Store);
+    // ===================================================================
 
-    IOrderStore store = useFile
-        ? new FileOrderStore(dataPath)
-        : new InMemoryOrderStore(SampleData.Orders());
-
-    var orderService = new OrderService(store);
-    // =======================================================================
-
-    Console.WriteLine($"Сховище: {store.GetType().Name}");
-    if (useFile) Console.WriteLine($"Файл: {dataPath}");
+    Console.WriteLine($"Сховище: {setup.Name}");
+    if (setup.FilePath is not null) Console.WriteLine($"Файл: {setup.FilePath}");
     Console.WriteLine();
 
     string newId = $"O-{Guid.NewGuid().ToString("N")[..8]}";
@@ -157,10 +151,25 @@ if (args.Length == 0 || args.Contains("--file"))
 
     Console.WriteLine($"Усього замовлень: {orderService.All().Count}");
     foreach (Order o in orderService.All())
-        Console.WriteLine($" {o.Id,-12} {o.CustomerId,-6} {o.Status,-10} {o.Lines.Count,3} {o.Total,10:F2}");
-
+          Console.WriteLine($" {o.Id,-12} {o.CustomerId,-6} {o.Status,-10} {o.Lines.Count,3} {o.Total,10:F2}");
     Console.WriteLine();
+    
+
+    //lab5.2Extra
+        Console.WriteLine();
+    Console.WriteLine("=== Пошук з Func<Order, bool> ===");
+
+    var confirmed = orderService.Search(o => o.Status == OrderStatus.Confirmed);
+    Console.WriteLine($"  Підтверджених: {confirmed.Count}");
+
+    var c100 = orderService.Search(o => o.CustomerId == "C-100" && o.Total > 2000m);
+    Console.WriteLine($"  Клієнт C-100, сума > 2000: {c100.Count}");
+
+    decimal minTotal = 5000m;
+    var big = orderService.Search(o => o.Total >= minTotal);
+    Console.WriteLine($"  Сума ≥ {minTotal}: {string.Join(", ", big.Select(o => o.Id))}");
     Console.WriteLine("=== Сценарій відмови ===");
+
 
     // 1. Дубль id: унікальність перевіряє сховище
     try
@@ -194,8 +203,8 @@ if (args.Length == 0 || args.Contains("--file"))
     {
         Console.WriteLine($"  Помилка (правило замовлення): {ex.Message}");
     }
-
-    
+    if (setup.Caching is not null)
+        Console.WriteLine($"Кеш: влучань {setup.Caching.Hits}, промахів {setup.Caching.Misses}");
     return 0;
 }
 
@@ -263,5 +272,37 @@ static void TryDo(string title, Action action)
     catch (Exception ex)
     {
         Console.WriteLine($"  {title}: {ex.GetType().Name} — {ex.Message}");
+    }
+}
+
+
+//Extra lab 5.3
+public sealed record StoreSetup(
+    IOrderStore Store,
+    string Name,
+    CachingOrderStore? Caching,
+    string? FilePath);
+
+public static class StoreFactory
+{
+    public static StoreSetup Create(string[] args)
+    {
+        bool useFile = args.Contains("--file");
+        string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "orders.json");
+
+        IOrderStore store = useFile
+            ? new FileOrderStore(dataPath)
+            : new InMemoryOrderStore(SampleData.Orders());
+
+        string name = store.GetType().Name;
+        CachingOrderStore? caching = null;
+
+        if (args.Contains("--cache"))
+        {
+            store = caching = new CachingOrderStore(store);
+            name = $"{nameof(CachingOrderStore)} → {name}";
+        }
+
+        return new StoreSetup(store, name, caching, useFile ? dataPath : null);
     }
 }
