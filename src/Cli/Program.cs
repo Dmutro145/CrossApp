@@ -6,7 +6,8 @@ using Core.Domain;
 using Core.Services;
 using Core.Storage;
 using Core.Abstractions;
-
+//lab6
+using Core.Events;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 EnvironmentReport report = EnvironmentInfo.Collect();
@@ -125,6 +126,113 @@ if (args.Contains("--domain"))
     TryDo("Cancelled -> Confirmed", () => o6.Confirm());
     TryDo("Cancelled -> Cancelled", () => o6.Cancel());
     TryDo("додати рядок до скасованого", () => o6.AddLine("P-2", "Пісок", 10m, 1));
+    return 0;
+}
+//lab6
+if (args.Contains("--events"))
+{
+    Console.WriteLine("=== Лаба 6: події ===");
+
+    StoreSetup eventsSetup = StoreFactory.Create(args);
+    var eventsService = new OrderService(eventsSetup.Store);
+    Console.WriteLine($"Сховище: {eventsSetup.Name}");
+
+    var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
+    Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+    File.WriteAllText(logPath, string.Empty); // новий лог на кожен запуск
+
+    void OnOrderChanged(object? sender, OrderChangedEventArgs e)
+    {
+        var line = $"{e.At:HH:mm:ss} {e.Kind,-15} {e.OrderId} рядків {e.LinesCount,2} сума {e.Total,10:F2}";
+        Console.WriteLine(line);
+        try
+        {
+            File.AppendAllText(logPath, line + Environment.NewLine);
+        }
+        catch (IOException ex)
+        {
+            Console.WriteLine($"  [лог недоступний: {ex.Message}]");
+        }
+    }
+
+    // підписник 1: локальний метод (його можна зняти через -=)
+    eventsService.Changed += OnOrderChanged;
+
+    // підписник 2: лямбда із замиканням над змінною changes
+    int changes = 0;
+    eventsService.Changed += (_, _) =>
+    {
+        changes++;
+        Console.WriteLine($"   лічильник: {changes}");
+    };
+
+    // успішні операції: по одній події на кожну
+    string eventsId = $"O-{Guid.NewGuid().ToString("N")[..8]}";
+    eventsService.CreateOrder(eventsId, "C-100");
+    eventsService.AddLine(eventsId, "P-001", "Цемент М400 25кг", 185.50m, 10);
+    eventsService.Confirm(eventsId);
+    Console.WriteLine($"Подій отримано: {changes}");
+
+    // сценарій відмови: обидва підписники ще активні, подій бути не має
+    Console.WriteLine("=== Сценарій відмови ===");
+    int before = changes;
+
+    try
+    {
+        eventsService.Confirm("O-NOT-EXISTS");
+        Console.WriteLine("  Неіснуючий id: виняток НЕ спрацював!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"  Помилка (немає замовлення): {ex.Message}");
+    }
+
+    try
+    {
+        eventsService.Confirm(eventsId);
+        Console.WriteLine("  Повторне підтвердження: виняток НЕ спрацював!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"  Помилка (повторне підтвердження): {ex.Message}");
+    }
+
+    try
+    {
+        eventsService.AddLine(eventsId, "P-002", "Пісок", 95m, -3);
+        Console.WriteLine("  AddLine: виняток НЕ спрацював!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"  Помилка (AddLine, кількість -3): {ex.Message}");
+    }
+
+    Console.WriteLine($"Подій під час відмов: {changes - before}"); // має бути 0
+
+    // відписка: дані змінюються, консоль і файл мовчать
+    eventsService.Changed -= OnOrderChanged;
+    Console.WriteLine("--- відписка від OnOrderChanged ---");
+
+    string silentId = $"O-{Guid.NewGuid().ToString("N")[..8]}";
+    eventsService.CreateOrder(silentId, $"C-{Guid.NewGuid().ToString("N")[..4]}");
+
+    Console.WriteLine($"Замовлень у сховищі: {eventsService.All().Count}");
+    Console.WriteLine($"Подій отримано: {changes}"); // +1 лише від лямбди
+    
+        // Func замість події: тут потрібне значення у відповідь
+    Console.WriteLine("=== Пошук через Func<Order, bool> ===");
+
+    var confirmed = eventsService.Search(ord => ord.Status == OrderStatus.Confirmed);
+    Console.WriteLine($"Підтверджених: {confirmed.Count}");
+
+    decimal minTotal = 3000m;
+    var big = eventsService.Search(ord => ord.Total >= minTotal);
+    Console.WriteLine($"Сума ≥ {minTotal}:");
+    foreach (Order ord in big)
+        Console.WriteLine($"  {ord.Id,-12} {ord.CustomerId,-6} {ord.Status,-10} {ord.Total,10:F2}");
+
+    Console.WriteLine($"Подій отримано: {changes}"); // лишилось 4: пошук нічого не змінює
+    Console.WriteLine($"Лог: {logPath}");
     return 0;
 }
 

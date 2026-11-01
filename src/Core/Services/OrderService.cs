@@ -1,5 +1,7 @@
 using Core.Abstractions;
 using Core.Domain;
+//lab6
+using Core.Events;
 
 namespace Core.Services;
 
@@ -8,6 +10,13 @@ public sealed class OrderService(IOrderStore store)
     public const int MaxOpenOrdersPerCustomer = 5;
 
     private readonly IOrderStore _store = store ?? throw new ArgumentNullException(nameof(store));
+
+    //lab6
+    public event EventHandler<OrderChangedEventArgs>? Changed;
+
+    private void OnChanged(Order order, OrderChangeKind kind) =>
+        Changed?.Invoke(this, new OrderChangedEventArgs(
+            order.Id, kind, order.Lines.Count, order.Total));
 
     public Order CreateOrder(string id, string customerId)
     {
@@ -21,6 +30,7 @@ public sealed class OrderService(IOrderStore store)
                 $"У клієнта {order.CustomerId} уже {open} незавершених замовлень (максимум {MaxOpenOrdersPerCustomer})");
 
         _store.Add(order); // унікальність id перевіряє сховище
+        OnChanged(order, OrderChangeKind.OrderCreated); //lab6: після зміни, не до
         return order;
     }
 
@@ -29,6 +39,7 @@ public sealed class OrderService(IOrderStore store)
         Order order = GetOrThrow(orderId);
         order.AddLine(productId, name, price, quantity);
         _store.Update(order);
+        OnChanged(order, OrderChangeKind.LineAdded); //lab6
     }
 
     public void Confirm(string orderId)
@@ -36,12 +47,13 @@ public sealed class OrderService(IOrderStore store)
         Order order = GetOrThrow(orderId);
         order.Confirm();
         _store.Update(order);
+        OnChanged(order, OrderChangeKind.OrderConfirmed); //lab6
     }
 
     public IReadOnlyList<Order> All() => _store.List();
 
     public Order? Find(string id) => _store.GetById(id);
-    
+
     //Extra lab5.2
     public IReadOnlyList<Order> Search(Func<Order, bool> predicate)
     {

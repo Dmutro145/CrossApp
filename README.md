@@ -85,3 +85,17 @@ dotnet run --project src/Cli -- --file    # FileOrderStore, дані накоп�
 
 Сценарій: створити замовлення, додати рядки, підтвердити, показати список, знайти за id, потім сценарій відмови (дубль id, неіснуючий id, повторне підтвердження).
 Режими попередніх лабораторних: `-- --domain` (лаб. 4), `-- data\sample.csv` (лаб. 3).
+
+## Лабораторна 6: події, Func, лямбди
+
+Подія `OrderService.Changed` (`EventHandler<OrderChangedEventArgs>`) повідомляє, що замовлення змінилося. `Core` не пише в консоль і файл: як обробити подію, вирішує `Cli`.
+
+Типи в `src/Core/Events`: `OrderChangeKind` (`OrderCreated`, `LineAdded`, `OrderConfirmed`), `OrderChangedEventArgs` (`OrderId`, `Kind`, `LinesCount`, `Total`, `At`).
+Подію піднімає приватний `OnChanged` лише після збереження в сховищі, тому при винятку події немає.
+
+Підписники в `Cli`: локальний метод `OnOrderChanged` (консоль і `logs/app.log`) та лямбда-лічильник. Є відписка `-=`. Пошук через `Func<Order, bool>`: `OrderService.Search`.
+
+### Запуск
+dotnet run --project src/Cli -- --events
+
+Лог: `src/Cli/bin/Debug/net10.0/logs/app.log`.
