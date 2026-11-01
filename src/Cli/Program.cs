@@ -236,6 +236,39 @@ if (args.Contains("--events"))
     return 0;
 }
 
+//lab6 extra: INotificationSink
+if (args.Contains("--sinks"))
+{
+    Console.WriteLine("=== Лаба 6 extra: INotificationSink ===");
+
+    StoreSetup sinksSetup = StoreFactory.Create(args);
+    
+    Console.WriteLine($"Сховище: {sinksSetup.Name}");
+    var sinksLogPath = Path.Combine(AppContext.BaseDirectory, "logs", "sinks.log");
+    var fileSink = new FileSink(sinksLogPath);       // конструктор створює каталог
+    File.WriteAllText(sinksLogPath, string.Empty);   // новий лог на кожен запуск
+
+    // sink'и передає Cli через конструктор (ручний DI)
+    var sinksService = new OrderService(sinksSetup.Store, new ConsoleSink(), fileSink);
+    string sinkOrderId = $"O-{Guid.NewGuid().ToString("N")[..8]}";
+    sinksService.CreateOrder(sinkOrderId, "C-100");
+    sinksService.AddLine(sinkOrderId, "P-001", "Цемент М400 25кг", 185.50m, 10);
+    sinksService.Confirm(sinkOrderId);
+
+    Console.WriteLine("=== Відмова: sink'и мовчать ===");
+    try
+    {
+        sinksService.Confirm(sinkOrderId);
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.WriteLine($"  Помилка: {ex.Message}");
+    }
+
+    Console.WriteLine($"Лог: {sinksLogPath}");
+    return 0;
+}
+
 if (args.Length == 0 || args.Contains("--file") || args.Contains("--cache"))
 {
         // ===== Composition root: вибір сховища винесено у StoreFactory =====
@@ -344,9 +377,21 @@ if (args.Contains("--mixed"))
     return 0;
 }
 
+//lab6.2 extra: Action<string> для звіту про пропущені рядки
+var skippedLog = Path.Combine(AppContext.BaseDirectory, "logs", "skipped.log");
+Directory.CreateDirectory(Path.GetDirectoryName(skippedLog)!);
+File.WriteAllText(skippedLog, string.Empty);
+int skippedCount = 0;
+
+void ReportSkipped(string message)
+{
+    skippedCount++;
+    File.AppendAllText(skippedLog, message + Environment.NewLine);
+}
+
 ImportResult<ProductDto>? result = Path.GetExtension(path).ToLowerInvariant() switch
 {
-    ".csv"  => ProductCsvImporter.Load(path),
+    ".csv"  => ProductCsvImporter.Load(path, ReportSkipped),
     ".json" => ProductJsonImporter.Load(path),
     _       => null
 };
@@ -368,6 +413,8 @@ if (result.Errors.Count > 0)
         Console.WriteLine($" ! {e}");
 }
 Console.WriteLine(result.Summary());
+if (skippedCount > 0)
+    Console.WriteLine($"Звіт про пропущені рядки ({skippedCount}): {skippedLog}");
 return 0;
 
 static void TryDo(string title, Action action)
@@ -390,8 +437,8 @@ public sealed record StoreSetup(
     string Name,
     CachingOrderStore? Caching,
     string? FilePath);
-
-public static class StoreFactory
+ 
+ public static class StoreFactory
 {
     public static StoreSetup Create(string[] args)
     {
@@ -412,5 +459,36 @@ public static class StoreFactory
         }
 
         return new StoreSetup(store, name, caching, useFile ? dataPath : null);
+    }
+}
+
+//lab6 extra
+public sealed class ConsoleSink : INotificationSink
+{
+    public void Notify(OrderChangedEventArgs e) =>
+        Console.WriteLine($"{e.At:HH:mm:ss} {e.Kind,-15} {e.OrderId} рядків {e.LinesCount,2} сума {e.Total,10:F2}");
+}
+
+public sealed class FileSink : INotificationSink
+{
+    private readonly string _path;
+
+    public FileSink(string path)
+    {
+        _path = path;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+    }
+
+    public void Notify(OrderChangedEventArgs e)
+    {
+        var line = $"{e.At:HH:mm:ss} {e.Kind,-15} {e.OrderId} рядків {e.LinesCount,2} сума {e.Total,10:F2}";
+        try
+        {
+            File.AppendAllText(_path, line + Environment.NewLine);
+        }
+        catch (IOException ex)
+        {
+            Console.WriteLine($"  [лог недоступний: {ex.Message}]");
+        }
     }
 }

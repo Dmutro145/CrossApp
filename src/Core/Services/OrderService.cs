@@ -5,7 +5,7 @@ using Core.Events;
 
 namespace Core.Services;
 
-public sealed class OrderService(IOrderStore store)
+public sealed class OrderService(IOrderStore store, params INotificationSink[] sinks)
 {
     public const int MaxOpenOrdersPerCustomer = 5;
 
@@ -14,9 +14,13 @@ public sealed class OrderService(IOrderStore store)
     //lab6
     public event EventHandler<OrderChangedEventArgs>? Changed;
 
-    private void OnChanged(Order order, OrderChangeKind kind) =>
-        Changed?.Invoke(this, new OrderChangedEventArgs(
-            order.Id, kind, order.Lines.Count, order.Total));
+   private void OnChanged(Order order, OrderChangeKind kind)
+    {
+        var args = new OrderChangedEventArgs(order.Id, kind, order.Lines.Count, order.Total);
+        Changed?.Invoke(this, args);   // подія: підписники в Cli
+        foreach (var sink in _sinks)   // sink'и з конструктора
+            sink.Notify(args);
+    }
 
     public Order CreateOrder(string id, string customerId)
     {
@@ -60,6 +64,8 @@ public sealed class OrderService(IOrderStore store)
         ArgumentNullException.ThrowIfNull(predicate);
         return _store.List().Where(predicate).ToList();
     }
+   //Extra lab6.1
+   private readonly INotificationSink[] _sinks = sinks;
 
     private Order GetOrThrow(string id) =>
         _store.GetById(id) ?? throw new InvalidOperationException($"Немає замовлення з id={id}.");
