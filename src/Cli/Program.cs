@@ -1,4 +1,5 @@
 ﻿using Core;
+using System.Diagnostics;
 using System.Globalization;
 using Core.Dto;
 using Core.Import;
@@ -325,8 +326,24 @@ if (args.Any(a => a.StartsWith("report-")))
             var te = ReportService.Totals(empty);
             Console.WriteLine($" Totals: {te.Items}, {te.Total}, {te.Average}, {te.Max}");
             break;
+        case "report-bench":
+            var data = SampleData.Generate(100_000);
+            Console.WriteLine($" Згенеровано записів: {data.Count}");
+            Measure("Без ToList усередині", () => ReportService.TopConfirmedCustomers(data, 10));
+            Measure("ToList після кожного кроку", () => ReportService.TopConfirmedCustomersEager(data, 10));
+            break;
         default:
-            Console.WriteLine("report-top | report-big | report-groups | report-customers | report-sum | report-empty");
+            Console.WriteLine("report-top | report-big | report-groups | report-customers | report-sum | report-empty | report-bench");
+            break;
+        //lab7:Extra 1
+        case "report-join":
+            foreach (var s in ReportService.CustomerTotals(SampleData.Customers(), items))
+                Console.WriteLine($" {s.CustomerId,-8} {s.Name,-22} замовлень: {s.Orders,3} сумарно: {s.TotalAmount,10:F2}");
+            break;
+        //lab7:extra3
+        case "report-groups-query":
+            foreach (var g in ReportService.ByStatusQuery(items))
+                Console.WriteLine($" {g.Key,-10} замовлень: {g.Count,3} сумарно: {g.TotalAmount,10:F2}");
             break;
     }
 
@@ -334,6 +351,20 @@ if (args.Any(a => a.StartsWith("report-")))
     {
         foreach (var l in lines)
             Console.WriteLine($" {l.OrderId,-8} {l.CustomerId,-8} {l.Status,-10} {l.Total,10:F2}");
+    }
+    //lab7:extra4
+    static void Measure(string title, Func<IReadOnlyList<GroupSummary>> run)
+    {
+        run();                                   // прогрів (JIT)
+        var times = new List<double>();
+        for (int i = 0; i < 5; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            run();
+            sw.Stop();
+            times.Add(sw.Elapsed.TotalMilliseconds);
+        }
+        Console.WriteLine($" {title,-32} мін {times.Min(),8:F2} мс   середнє {times.Average(),8:F2} мс");
     }
 
     return 0;

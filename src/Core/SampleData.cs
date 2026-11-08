@@ -1,9 +1,21 @@
 using Core.Domain;
+using Core.Dto;
 
 namespace Core;
 
 public static class SampleData
-{
+{   //lab7:Extra1
+    public static IReadOnlyList<CustomerDto> Customers() =>
+    [
+        new("C-100", "ТОВ «Будмайстер»"),
+        new("C-101", "ФОП Іваненко"),
+        new("C-102", "ТОВ «Домобуд»"),
+        new("C-103", "ФОП Петренко"),
+        new("C-104", "ТОВ «Ремонт-Сервіс»"),
+        new("C-105", "ФОП Коваленко"),
+        new("C-106", "ТОВ «Новий клієнт»"),
+    ];
+
     public static IReadOnlyList<Order> Orders() =>
     [
         Make("O-001", "C-100", OrderStatus.Confirmed, ("P-001", "Цемент М400 25кг", 185.50m, 10), ("P-002", "Пісок будівельний", 95m, 3)),
@@ -39,5 +51,31 @@ public static class SampleData
         }
 
         return order;
+    }
+    //lab7:Extra3
+    // Детермінована генерація для вимірювань (seed фіксований, дані однакові між запусками)
+    public static IReadOnlyList<Order> Generate(int count, int seed = 42)
+    {
+        var rnd = new Random(seed);
+        var result = new List<Order>(count);
+
+        for (int i = 1; i <= count; i++)
+        {
+            var order = Order.Create($"G-{i:D6}", $"C-{rnd.Next(1, 1001)}");
+
+            int lines = rnd.Next(1, 4);
+            for (int j = 0; j < lines; j++)
+                order.AddLine($"P-{rnd.Next(1, 200):D3}", "Товар", rnd.Next(10, 1000), rnd.Next(1, 20));
+
+            switch (rnd.Next(3))
+            {
+                case 0: order.Confirm(); break;
+                case 1: order.Cancel(); break;
+            }
+
+            result.Add(order);
+        }
+
+        return result;
     }
 }
