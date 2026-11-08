@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Core.Abstractions;
 using Core.Domain;
@@ -5,7 +6,7 @@ using Core.Dto;
 
 namespace Core.Storage;
 
-public sealed class JsonOrderImporter : IOrderImporter
+public sealed class JsonOrderImporter : IOrderImporter, IOrderStreamImporter
 {
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -30,5 +31,26 @@ public sealed class JsonOrderImporter : IOrderImporter
             { throw new DomainException($"Запис {i + 1}: {ex.Message}", ex); }
         }
         return result;
+    }
+
+    //lab8:extra1
+    public async IAsyncEnumerable<Order> StreamAsync(string path,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read, 4096, useAsync: true);
+
+        var index = 0;
+        await foreach (var dto in JsonSerializer.DeserializeAsyncEnumerable<OrderDto>(stream, Options, ct))
+        {
+            ct.ThrowIfCancellationRequested();
+            index++;
+            Order order;
+            try { order = Order.FromDto(dto!); }
+            catch (Exception ex) when (ex is ArgumentException or DomainException)
+            { throw new DomainException($"Запис {index}: {ex.Message}", ex); }
+            yield return order;   // yield поза try/catch: у C# в try з catch його не можна
+        }
     }
 }

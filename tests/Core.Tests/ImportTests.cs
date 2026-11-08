@@ -16,7 +16,20 @@ public class ImportTests
             return Task.FromResult(items);
         }
     }
+    private sealed class ListProgress : IProgress<int>
+    {
+        public List<int> Values { get; } = [];
+        public void Report(int value) => Values.Add(value);
+    }
 
+    private sealed class SlowImporter : IOrderImporter
+    {
+        public async Task<IReadOnlyList<Order>> LoadAsync(string path, CancellationToken ct = default)
+        {
+            await Task.Delay(Timeout.Infinite, ct);   // чекає, поки токен не скасують
+            return [];
+        }
+    }
     [Fact] // скасування
     public async Task ImportAsync_WhenAlreadyCancelled_Throws()
     {
@@ -44,6 +57,17 @@ public class ImportTests
         Assert.Equal(4, events.Count);
     }
 
+    [Fact] // прогрес: 4 записи → 25, 50, 75, 100
+    public async Task ImportAsync_ReportsProgress_EndingAt100()
+    {
+        var service = new OrderService(new InMemoryOrderStore());
+        var progress = new ListProgress();
+
+        await service.ImportAsync(new FakeImporter(TestData.Items()), "x.json", progress: progress);
+
+        Assert.Equal(new[] { 25, 50, 75, 100 }, progress.Values);
+    }
+
     [Fact] // єдиний тест із тимчасовим файлом
     public async Task LoadAsync_WithInvalidRecord_ThrowsDomainException_WithRecordNumber()
     {
@@ -69,5 +93,26 @@ public class ImportTests
         {
             File.Delete(path);
         }
+    }
+    //lab8:exta2
+    [Fact] // доводить, що спрацював саме таймаут
+    public async Task ImportWithTimeoutAsync_WhenTooSlow_ThrowsTimeoutException()
+    {
+        var service = new OrderService(new InMemoryOrderStore());
+
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            service.ImportWithTimeoutAsync(new SlowImporter(), "x.json", TimeSpan.FromMilliseconds(50)));
+    }
+
+    [Fact] // скасував користувач, а не таймаут
+    public async Task ImportWithTimeoutAsync_WhenUserCancels_ThrowsOperationCanceled_NotTimeout()
+    {
+        using var userCts = new CancellationTokenSource();
+        userCts.CancelAfter(TimeSpan.FromMilliseconds(50));
+        var service = new OrderService(new InMemoryOrderStore());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ImportWithTimeoutAsync(new SlowImporter(), "x.json",
+                TimeSpan.FromSeconds(10), userCts.Token));
     }
 }

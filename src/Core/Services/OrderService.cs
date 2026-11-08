@@ -23,23 +23,60 @@ public sealed class OrderService(IOrderStore store, params INotificationSink[] s
     }
     //lab8
     public async Task<int> ImportAsync(IOrderImporter importer, string path,
-        CancellationToken ct = default)
+        CancellationToken ct = default, IProgress<int>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(importer);
 
         var items = await importer.LoadAsync(path, ct);
         var added = 0;
-        foreach (var order in items)
+        for (var i = 0; i < items.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
-            if (_store.GetById(order.Id) is not null) continue; // ідемпотентність імпорту
+            var order = items[i];
+            if (_store.GetById(order.Id) is null)          // ідемпотентність імпорту
+            {
+                _store.Add(order);
+                OnChanged(order, OrderChangeKind.OrderCreated);
+                added++;
+            }
+            progress?.Report((i + 1) * 100 / items.Count); // відсотки
+        }
+        return added;
+    }
+
+    //lab8:extra1
+    public async Task<int> ImportStreamAsync(IOrderStreamImporter importer, string path,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(importer);
+
+        var added = 0;
+        await foreach (var order in importer.StreamAsync(path).WithCancellation(ct))
+        {
+            if (_store.GetById(order.Id) is not null) continue;
             _store.Add(order);
-            OnChanged(order, OrderChangeKind.OrderCreated);     // подія після успішного Add
+            OnChanged(order, OrderChangeKind.OrderCreated);
             added++;
         }
         return added;
     }
 
+    //lab8:extra2
+    public async Task<int> ImportWithTimeoutAsync(IOrderImporter importer, string path,
+        TimeSpan timeout, CancellationToken userToken = default, IProgress<int>? progress = null)
+    {
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(userToken, timeoutCts.Token);
+        try
+        {
+            return await ImportAsync(importer, path, linked.Token, progress);
+        }
+        catch (OperationCanceledException)
+            when (timeoutCts.IsCancellationRequested && !userToken.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Імпорт не вклався у {timeout.TotalMilliseconds:F0} мс.");
+        }
+    }
     public Order CreateOrder(string id, string customerId)
     {
         Order order = Order.Create(id, customerId); // інваріанти перевіряє сутність

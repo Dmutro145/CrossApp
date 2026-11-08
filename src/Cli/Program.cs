@@ -250,7 +250,6 @@ if (args.Contains("--sinks"))
     var sinksLogPath = Path.Combine(AppContext.BaseDirectory, "logs", "sinks.log");
     var fileSink = new FileSink(sinksLogPath);       // конструктор створює каталог
     File.WriteAllText(sinksLogPath, string.Empty);   // новий лог на кожен запуск
-
     // sink'и передає Cli через конструктор (ручний DI)
     var sinksService = new OrderService(sinksSetup.Store, new ConsoleSink(), fileSink);
     string sinkOrderId = $"O-{Guid.NewGuid().ToString("N")[..8]}";
@@ -287,18 +286,33 @@ if (args.Contains("--import"))
     if (args.Contains("--cancel-now")) cts.Cancel();   // для демонстрації скасування
     // для демонстрації таймауту: cts.CancelAfter(TimeSpan.FromSeconds(2));
 
+    var importer = new JsonOrderImporter();
+    //Extra2:lab8 (таймаут: --timeout=мс)
+    var timeoutArg = args.FirstOrDefault(a => a.StartsWith("--timeout="))?.Split('=')[1];
+    //Extra3:lab8 (прогрес у відсотках)
+    var progress = new ConsoleProgress();
+    //Extra1:lab8 (--stream), Extra2:lab8 (таймаут), звичайний імпорт з прогресом
+    Task<int> RunImport() =>
+        timeoutArg is not null
+            ? importService.ImportWithTimeoutAsync(importer, importPath,
+                TimeSpan.FromMilliseconds(int.Parse(timeoutArg)), cts.Token, progress)
+        : args.Contains("--stream")
+            ? importService.ImportStreamAsync(importer, importPath, cts.Token)
+            : importService.ImportAsync(importer, importPath, cts.Token, progress);
+
     try
     {
-        var added = await importService.ImportAsync(new JsonOrderImporter(), importPath, cts.Token);
+        var added = await RunImport();
         Console.WriteLine($"Імпортовано записів: {added} (подій: {events})");
 
-        var again = await importService.ImportAsync(new JsonOrderImporter(), importPath, cts.Token);
+        var again = await RunImport();
         Console.WriteLine($"Повторний імпорт: {again} (ідемпотентність)");
     }
     catch (OperationCanceledException) { Console.WriteLine("Імпорт скасовано."); }
     catch (DomainException ex) { Console.WriteLine($"Дані відхилено: {ex.Message}"); }
     catch (FileNotFoundException) { Console.WriteLine($"Файл не знайдено: {importPath}"); }
     catch (System.Text.Json.JsonException ex) { Console.WriteLine($"Некоректний JSON: {ex.Message}"); }
+    catch (TimeoutException ex) { Console.WriteLine($"Таймаут: {ex.Message}"); }
 
     return 0;
 }
@@ -622,5 +636,15 @@ public sealed class FileSink : INotificationSink
         {
             Console.WriteLine($"  [лог недоступний: {ex.Message}]");
         }
+    }
+}
+
+ //lab8:extra3
+public sealed class ConsoleProgress : IProgress<int>
+{
+    public void Report(int percent)
+    {
+        Console.Write($"\rІмпорт: {percent,3}%");
+        if (percent == 100) Console.WriteLine();
     }
 }
