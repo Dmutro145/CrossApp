@@ -1,0 +1,7 @@
+[
+  { "id": "IMP-001", "customerId": "C-200", "isConfirmed": false,
+    "lines": [ { "productId": "P-1", "name": "Цемент", "price": 185.50, "quantity": 4 } ] },
+  { "id": "IMP-002", "customerId": "C-201", "isConfirmed": true,
+    "lines": [ { "productId": "P-2", "name": "Пісок", "price": 95, "quantity": 3 } ] },
+  { "id": "IMP-003", "customerId": "C-202", "isConfirmed": false, "lines": [] }
+]

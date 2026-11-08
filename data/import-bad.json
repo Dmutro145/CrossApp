@@ -1,0 +1,6 @@
+[
+  { "id": "BAD-001", "customerId": "C-300", "isConfirmed": false,
+    "lines": [ { "productId": "P-1", "name": "Цемент", "price": 100, "quantity": 2 } ] },
+  { "id": "BAD-002", "customerId": "C-301", "isConfirmed": false,
+    "lines": [ { "productId": "P-2", "name": "Пісок", "price": 95, "quantity": -3 } ] }
+]

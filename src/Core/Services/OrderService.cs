@@ -21,6 +21,24 @@ public sealed class OrderService(IOrderStore store, params INotificationSink[] s
         foreach (var sink in _sinks)   // sink'и з конструктора
             sink.Notify(args);
     }
+    //lab8
+    public async Task<int> ImportAsync(IOrderImporter importer, string path,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(importer);
+
+        var items = await importer.LoadAsync(path, ct);
+        var added = 0;
+        foreach (var order in items)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (_store.GetById(order.Id) is not null) continue; // ідемпотентність імпорту
+            _store.Add(order);
+            OnChanged(order, OrderChangeKind.OrderCreated);     // подія після успішного Add
+            added++;
+        }
+        return added;
+    }
 
     public Order CreateOrder(string id, string customerId)
     {
@@ -30,7 +48,7 @@ public sealed class OrderService(IOrderStore store, params INotificationSink[] s
             o.CustomerId == order.CustomerId && o.Status == OrderStatus.Draft);
 
         if (open >= MaxOpenOrdersPerCustomer)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"У клієнта {order.CustomerId} уже {open} незавершених замовлень (максимум {MaxOpenOrdersPerCustomer})");
 
         _store.Add(order); // унікальність id перевіряє сховище
@@ -68,5 +86,5 @@ public sealed class OrderService(IOrderStore store, params INotificationSink[] s
    private readonly INotificationSink[] _sinks = sinks;
 
     private Order GetOrThrow(string id) =>
-        _store.GetById(id) ?? throw new InvalidOperationException($"Немає замовлення з id={id}.");
+        _store.GetById(id) ?? throw new DomainException($"Немає замовлення з id={id}.");
 }

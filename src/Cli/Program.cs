@@ -263,12 +263,43 @@ if (args.Contains("--sinks"))
     {
         sinksService.Confirm(sinkOrderId);
     }
-    catch (InvalidOperationException ex)
+    catch (DomainException ex)
     {
         Console.WriteLine($"  Помилка: {ex.Message}");
     }
 
     Console.WriteLine($"Лог: {sinksLogPath}");
+    return 0;
+}
+
+//lab8: async-імпорт, скасування, доменні помилки
+if (args.Contains("--import"))
+{
+    string importPath = args.SkipWhile(a => a != "--import").Skip(1)
+        .FirstOrDefault(a => !a.StartsWith("--")) ?? Path.Combine("data", "import-orders.json");
+
+    var importService = new OrderService(StoreFactory.Create(args).Store);
+    int events = 0;
+    importService.Changed += (_, _) => events++;
+
+    using var cts = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+    if (args.Contains("--cancel-now")) cts.Cancel();   // для демонстрації скасування
+    // для демонстрації таймауту: cts.CancelAfter(TimeSpan.FromSeconds(2));
+
+    try
+    {
+        var added = await importService.ImportAsync(new JsonOrderImporter(), importPath, cts.Token);
+        Console.WriteLine($"Імпортовано записів: {added} (подій: {events})");
+
+        var again = await importService.ImportAsync(new JsonOrderImporter(), importPath, cts.Token);
+        Console.WriteLine($"Повторний імпорт: {again} (ідемпотентність)");
+    }
+    catch (OperationCanceledException) { Console.WriteLine("Імпорт скасовано."); }
+    catch (DomainException ex) { Console.WriteLine($"Дані відхилено: {ex.Message}"); }
+    catch (FileNotFoundException) { Console.WriteLine($"Файл не знайдено: {importPath}"); }
+    catch (System.Text.Json.JsonException ex) { Console.WriteLine($"Некоректний JSON: {ex.Message}"); }
+
     return 0;
 }
 
@@ -419,7 +450,7 @@ if (args.Length == 0 || args.Contains("--file") || args.Contains("--cache"))
         orderService.CreateOrder(created.Id, "C-100");
         Console.WriteLine("  Дубль id: виняток НЕ спрацював!");
     }
-    catch (InvalidOperationException ex)
+    catch (DomainException ex)
     {
         Console.WriteLine($"  Помилка (дубль id): {ex.Message}");
     }
@@ -430,7 +461,7 @@ if (args.Length == 0 || args.Contains("--file") || args.Contains("--cache"))
         orderService.Confirm("O-NOT-EXISTS");
         Console.WriteLine("  Неіснуючий id: виняток НЕ спрацював!");
     }
-    catch (InvalidOperationException ex)
+    catch (DomainException ex)
     {
         Console.WriteLine($"  Помилка (немає замовлення): {ex.Message}");
     }
@@ -441,7 +472,7 @@ if (args.Length == 0 || args.Contains("--file") || args.Contains("--cache"))
         orderService.Confirm(created.Id);
         Console.WriteLine("  Повторне підтвердження: виняток НЕ спрацював!");
     }
-    catch (InvalidOperationException ex)
+    catch (DomainException ex)
     {
         Console.WriteLine($"  Помилка (правило замовлення): {ex.Message}");
     }

@@ -59,7 +59,7 @@ public sealed class FileOrderStore(string path) : IOrderStore
         EnsureLoaded();
 
         if (_cache.ContainsKey(order.Id))
-            throw new InvalidOperationException($"Замовлення з id={order.Id} уже існує.");
+            throw new DomainException($"Замовлення з id={order.Id} уже існує.");
 
         _cache.Add(order.Id, order);
         Flush();

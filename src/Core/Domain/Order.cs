@@ -41,7 +41,7 @@ public sealed class Order
     public void AddLine(string productId, string name, decimal price, int quantity)
     {
         if (Status != OrderStatus.Draft)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Замовлення {Id} має статус {Status}, рядки додавати не можна");
 
         // Створюємо рядок через його фабрику — усі перевірки кількості і ціни там
@@ -60,7 +60,7 @@ public sealed class Order
         };
 
         if (!allowed)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Замовлення {Id}: перехід {Status} -> {target} неможливий");
 
         Status = target;
@@ -68,9 +68,11 @@ public sealed class Order
 
     public void Confirm()
     {
+        if (Status == OrderStatus.Confirmed)
+            throw new DomainException($"Замовлення {Id} уже підтверджено");
+
         if (_lines.Count == 0)
-            throw new InvalidOperationException(
-                $"Не можна підтвердити порожнє замовлення {Id}");
+            throw new DomainException($"Не можна підтвердити порожнє замовлення {Id}");
 
         ChangeStatus(OrderStatus.Confirmed);
     }
