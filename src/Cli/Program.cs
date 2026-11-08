@@ -8,6 +8,8 @@ using Core.Storage;
 using Core.Abstractions;
 //lab6
 using Core.Events;
+//lab7
+using Core.Reports;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 EnvironmentReport report = EnvironmentInfo.Collect();
@@ -266,6 +268,74 @@ if (args.Contains("--sinks"))
     }
 
     Console.WriteLine($"Лог: {sinksLogPath}");
+    return 0;
+}
+
+if (args.Contains("report-lazy"))
+{
+    Console.WriteLine("=== Відкладене виконання LINQ ===");
+
+    var lazyService = new OrderService(new InMemoryOrderStore(SampleData.Orders()));
+    var source = lazyService.All().ToList();
+
+    var query = ReportService.CheapOrdersLazy(source, 1000m);   // запит побудовано, не виконано
+    Console.WriteLine($"Дешевих до змін: {query.Count()}");
+
+    source.Add(Order.Create("tmp00001", "C-999"));       // Total = 0
+    Console.WriteLine($"Дешевих після змін: {query.Count()}");   // число інше
+
+    var snapshot = query.ToList();                       // результат зафіксовано
+    source.Clear();
+    Console.WriteLine($"У знімку лишилось: {snapshot.Count}");   // не змінюється
+
+    return 0;
+}
+
+if (args.Any(a => a.StartsWith("report-")))
+{
+    var items = new OrderService(StoreFactory.Create(args).Store).All();
+    var command = args.FirstOrDefault(a => !a.StartsWith("--")) ?? "report-top";
+
+    switch (command)
+    {
+        case "report-top":
+            foreach (var customer in ReportService.TopCustomers(items, 5))
+                Console.WriteLine($" {customer.Key,-8} замовлень: {customer.Count,3} сумарно: {customer.TotalAmount,10:F2}");
+            break;
+        case "report-big":
+            Print(ReportService.BigOrders(items, 1000m));
+            break;
+        case "report-groups":
+            foreach (var g in ReportService.ByStatus(items))
+                Console.WriteLine($" {g.Key,-10} замовлень: {g.Count,3} сумарно: {g.TotalAmount,10:F2}");
+            break;
+        case "report-customers":
+            foreach (var c in ReportService.TopCustomers(items, 5))
+                Console.WriteLine($" {c.Key,-8} замовлень: {c.Count,3} сумарно: {c.TotalAmount,10:F2}");
+            break;
+        case "report-sum":
+            var t = ReportService.Totals(items);
+            Console.WriteLine($" замовлень {t.Items}, всього {t.Total:F2}, середнє {t.Average:F2}, макс {t.Max:F2}");
+            break;
+        case "report-empty":
+            var empty = Enumerable.Empty<Order>();
+            Console.WriteLine($" BigOrders: {ReportService.BigOrders(empty, 1000m).Count}");
+            Console.WriteLine($" TopByTotal: {ReportService.TopByTotal(empty, 5).Count}");
+            Console.WriteLine($" ByStatus: {ReportService.ByStatus(empty).Count}");
+            var te = ReportService.Totals(empty);
+            Console.WriteLine($" Totals: {te.Items}, {te.Total}, {te.Average}, {te.Max}");
+            break;
+        default:
+            Console.WriteLine("report-top | report-big | report-groups | report-customers | report-sum | report-empty");
+            break;
+    }
+
+    static void Print(IReadOnlyList<OrderLineReport> lines)
+    {
+        foreach (var l in lines)
+            Console.WriteLine($" {l.OrderId,-8} {l.CustomerId,-8} {l.Status,-10} {l.Total,10:F2}");
+    }
+
     return 0;
 }
 

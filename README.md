@@ -99,3 +99,15 @@ dotnet run --project src/Cli -- --file    # FileOrderStore, дані накоп�
 dotnet run --project src/Cli -- --events
 
 Лог: `src/Cli/bin/Debug/net10.0/logs/app.log`.
+
+## Лабораторна робота 7: звіти через LINQ
+
+Усі запити лежать у `src/Core/Reports/ReportService.cs` і повертають DTO (`OrderLineReport`, `GroupSummary`), а не `Order`. `Cli` лише викликає їх і друкує результат.
+
+Звіти: `report-top` (топ-5 клієнтів за сумою замовлень), `report-big` (замовлення дорожче 1000), `report-groups` (групування за статусом), `report-sum` (кількість, сума, середнє, максимум), `report-empty` (перевірка звітів на порожній послідовності).
+
+Запуск: `dotnet run --project src/Cli -- report-top` (аналогічно `report-big`, `report-groups`, `report-sum`, `report-empty`, `report-lazy`).
+
+### Відкладене виконання (`report-lazy`)
+
+Запит `source.Where(o => o.Total < 1000m)` лише описує умову відбору і не виконується в момент оголошення. Він виконується щоразу, коли його перебирають: у `Count()`, `ToList()` чи `foreach`. Тому перший `query.Count()` дав 7 (до змін у списку), а після `source.Add(...)` другий `query.Count()` пройшов список заново, побачив нове замовлення з сумою 0 і дав 8. Виклик `query.ToList()` один раз фіксує результат у списку `snapshot`, і навіть після `source.Clear()` в ньому лишається 8 елементів, бо `snapshot.Count` читає вже збережену властивість, а не виконує запит повторно.
